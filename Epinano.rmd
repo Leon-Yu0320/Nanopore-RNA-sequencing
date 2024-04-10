@@ -1,0 +1,177 @@
+---
+title: "1_Epinano_process"
+author: "Nelson A, Yu L"
+date: "2021/11/14"
+output: html_document
+---
+
+
+### Install or load packages 
+
+```{r}
+
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(VennDiagram)
+
+library(RColorBrewer)
+
+```
+
+### Load each modificaiton based on delta-mis
+
+```{r}
+#import file
+
+PATH0 = "C:/Users/Leon/OneDrive - Cornell University/Projects/8_Nanoseq/4_Results/1_Epinano/Nov08-results/"
+PATH1 = "C:/Users/Leon/OneDrive - Cornell University/Projects/8_Nanoseq/4_Results/1_Epinano/Nov08-Bed/Delta-mis/"
+
+
+sample.list <- read.table(paste0(PATH0, "sample.list"), sep ="\t", header = F)
+
+## Transform into bed files for each sample
+for (i in 1:nrow(sample.list)){
+  sample.df <- read.csv(paste0(PATH0,sample.list[i,1],".comp.delta-mis.prediction.csv"), header = F)
+  
+  sample.df <- sample.df %>% separate(V1, c("Chr", "Loci", "Base","Strand"), sep = " ")
+  colnames(sample.df) <- c("Chr", "Loci", "Base","Strand","KO_feature", "WT_feature", "Delta_mis", "Z_score", "Prediction")
+  sample.df$Loci <- as.integer(sample.df$Loci)
+  
+  ##Classify MT-KO modified sites 
+  sample.df$delta <- sample.df$WT_feature - sample.df$KO_feature
+  sample.df <- sample.df[sample.df$Base == "A",]
+  
+  wt.df <- sample.df[sample.df$delta > 0,]
+  ko.df <- sample.df[sample.df$delta < 0,]
+  
+  ##Re-organize the the output and transform into gffcompare-accpected bed files
+  wt.bed <- data.frame(wt.df$Chr, wt.df$Loci, wt.df$Loci + 1, paste0(wt.df$Chr, "=", wt.df$Loci, "=m6A"), "0", wt.df$Strand)
+  ko.bed <- data.frame(ko.df$Chr, ko.df$Loci, ko.df$Loci + 1, paste0(ko.df$Chr, "=", ko.df$Loci, "=m6A"), "0", ko.df$Strand)
+  
+  ##Export bed files for annotation 
+  write.table(wt.bed, paste0(PATH1, sample.list[i,1], "_mis_WT_bed.txt"), col.names = F, row.names = F, quote = F) 
+  
+  write.table(ko.bed, paste0(PATH1, sample.list[i,1], "_mis_KO_bed.txt"), col.names = F, row.names = F, quote = F) 
+  
+  ## assign two types of objects 
+  assign(paste0(sample.list[i,1], "_mis_WT"), wt.df)
+  assign(paste0(sample.list[i,1], "_mis_KO"), ko.df)
+  
+  assign(paste0(sample.list[i,1], "_mis_WT_bed"), wt.bed)
+  assign(paste0(sample.list[i,1], "_mis_KO_bed"), ko.bed)
+
+  
+  assign(sample.list[i,1], sample.df)
+  
+}
+
+```
+
+
+### Load each modificaiton based on delta-sum_err
+
+```{r}
+#import file
+
+PATH0 = "C:/Users/Leon/OneDrive - Cornell University/Projects/8_Nanoseq/4_Results/1_Epinano/Nov08-results/"
+PATH2 = "C:/Users/Leon/OneDrive - Cornell University/Projects/8_Nanoseq/4_Results/1_Epinano/Nov08-Bed/Delta_error/"
+
+
+sample.list <- read.table(paste0(PATH0, "sample.list"), sep ="\t", header = F)
+
+## Transform into bed files for each sample
+for (i in 1:nrow(sample.list)){
+  sample.df <- read.csv(paste0(PATH0,sample.list[i,1],".sumErr.delta-sum_err.prediction.csv"), header = F)
+  
+  sample.df <- sample.df %>% separate(V1, c("Chr", "Loci", "Base","Strand"), sep = " ")
+  colnames(sample.df) <- c("Chr", "Loci", "Base","Strand","KO_feature", "WT_feature", "Delta_sum_err", "Z_score", "Prediction")
+  sample.df$Loci <- as.integer(sample.df$Loci)
+  
+  ##Classify MT-KO modified sites 
+  sample.df$delta <- sample.df$WT_feature - sample.df$KO_feature
+  sample.df <- sample.df[sample.df$Base == "A",]
+  
+  wt.df <- sample.df[sample.df$delta > 0,]
+  ko.df <- sample.df[sample.df$delta < 0,]
+  
+  ##Re-organize the the output and transform into gffcompare-accpected bed files
+  wt.bed <- data.frame(wt.df$Chr, wt.df$Loci, wt.df$Loci + 1, paste0(wt.df$Chr, "=", wt.df$Loci, "=m6A"), "0", wt.df$Strand)
+  ko.bed <- data.frame(ko.df$Chr, ko.df$Loci, ko.df$Loci + 1, paste0(ko.df$Chr, "=", ko.df$Loci, "=m6A"), "0", ko.df$Strand)
+  
+  ##Export bed files for annotation 
+  write.table(wt.bed, paste0(PATH2, sample.list[i,1], "_sumerr_WT_bed.txt"), col.names = F, row.names = F, quote = F) 
+  
+  write.table(ko.bed, paste0(PATH2, sample.list[i,1], "_sumerr_KO_bed.txt"), col.names = F, row.names = F, quote = F) 
+  
+  ## assign two types of objects 
+  assign(paste0(sample.list[i,1], "_sumerr_WT"), wt.df)
+  assign(paste0(sample.list[i,1], "_sumerr_KO"), ko.df)
+  
+  assign(paste0(sample.list[i,1], "_sumerr_WT_bed"), wt.bed)
+  assign(paste0(sample.list[i,1], "_sumerr_KO_bed"), ko.bed)
+
+  
+  assign(sample.list[i,1], sample.df)
+  
+}
+
+```
+
+
+### Characterize the over-lapping modifications in between two replicates 
+UNDER THE Delta-mismatch list
+```{r}
+#Load comparison list 
+
+
+Match_list <- read.csv(paste0(PATH1, "Mis-Match_list.csv"), header = F)
+
+for (i in 1:nrow(Match_list )){
+  rep1 <- read.table(paste0(PATH1, Match_list[i,1]), header = F, sep = " ")
+  rep2 <- read.csv(paste0(PATH1, Match_list[i,2]), header = F, sep = " ")
+  venn.diagram(x = list(rep1$V4, rep2$V4), 
+               category.names = c("Replicate-1","Replicate-2"),
+               filename = paste0(PATH1,Match_list[i,3], "_mismatch.png"),
+              output = T,
+              
+              imagetype="png" ,
+              height = 1500 , 
+              width = 1500 , 
+              resolution = 500,
+              compression = "lzw",
+              
+              lwd = 2,
+              lty = 'blank',
+              fill = c("#B3E2CD","#FDCDAC"))
+}
+```
+
+
+UNDER THE Delta-sumerror list
+```{r}
+#Load comparison list 
+
+
+Match_list <- read.csv(paste0(PATH2, "Sumerr-Match_list.csv"), header = F)
+
+for (i in 1:nrow(Match_list )){
+  rep1 <- read.table(paste0(PATH2, Match_list[i,1]), header = F, sep = " ")
+  rep2 <- read.csv(paste0(PATH2, Match_list[i,2]), header = F, sep = " ")
+  venn.diagram(x = list(rep1$V4, rep2$V4), 
+               category.names = c("Replicate-1","Replicate-2"),
+               filename = paste0(PATH2,Match_list[i,3], "_sumerr.png"),
+              output = T,
+              
+              imagetype="png" ,
+              height = 1500 , 
+              width = 1500 , 
+              resolution = 500,
+              compression = "lzw",
+              
+              lwd = 2,
+              lty = 'blank',
+              fill = c("#B3E2CD","#FDCDAC"))
+}
+```
